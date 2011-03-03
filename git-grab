@@ -1,0 +1,59 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'open-uri'
+require 'json'
+
+unless ARGV.length == 1 then
+  puts "you need give a ticket number as the only argument..."
+  exit 1
+end
+
+number = ARGV[0].to_i
+data = open("https://projects.puppetlabs.com/issues/#{number}.json") do |fh|
+  JSON.parse(fh.read)["issue"] or fail "no data found after JSON parse"
+end
+
+type    = data["tracker"]["name"]
+subject = data["subject"] or fail "no subject found for the ticket O_o"
+target  = data["fixed_version"]["name"] or fail "no target version"
+origin  = if target =~ /^2\.6/ then "2.6.next" else "next" end
+
+subject = subject.
+  downcase.
+  tr('^-+_a-z0-9\'', ' ').
+  gsub(/\s+/, '-').
+  gsub(/-+$/, '')
+
+branch = "#{type.downcase}/#{origin}/#{number}-#{subject}"
+
+# Sanity checks
+unless (status = data["status"]["name"]).downcase == "accepted" then
+  puts "WARNING: this ticket is '#{status}', not Accepted"
+end
+
+# Confirmation
+print "grab #{branch} [Y/n] ? "
+while input = STDIN.gets.chomp.downcase do
+  break if input == '' or input =~ /^y(?:es)?/
+  if input =~ /^n(?:o)?/ then
+    puts "aborting..."
+    exit 0
+  end
+  print "invalid input '#{input}' [Y/n] ? "
+end
+
+# If we got here, we want to do this, so...
+have_branch = false
+on_branch   = false
+%x{git branch}.each do |ref|
+  if ref.chomp[2..-1] == branch then
+    have_branch = true
+    ref[0..0] == '*' and on_branch = true
+    break
+  end
+end
+
+# Actually do stuff, whee!
+have_branch or system 'git', 'branch', branch, origin
+on_branch   or system 'git', 'checkout', branch
+exit 0

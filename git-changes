@@ -1,0 +1,23 @@
+#!/bin/zsh
+
+set -e
+branch="$(git symbolic-ref HEAD)"
+branch="${branch#*/*/}"
+
+case "$branch" in
+    */*/[0-9]*)
+        from="${branch#*/}"
+        from="${from%/*}"
+        exec git log --oneline "$from".."$branch"
+        ;;
+
+    next|master|2.6.next|2.6.x)
+        echo "looks to be a puppet merge target branch..."
+        ;;
+
+    *)
+        echo "no idea what this is..."
+        ;;
+esac
+
+exit 0
