@@ -1,4 +1,19 @@
 #!/bin/bash
+source "$(git --exec-path)/git-sh-setup"
+require_work_tree
+
+if git config --get-colorbool color.branch; then
+    color='--color=always'
+    color_reset="$(git config --get-color '' 'reset')"
+    color_branch="$(git config --get-color 'color.branch.local' 'cyan')"
+    color_current="$(git config --get-color 'color.branch.current' 'green')"
+else
+    color=''
+    color_reset=''
+    color_branch=''
+    color_current=''
+fi
+
 check_busy() {
     target="$1"
     header=''
@@ -7,14 +22,15 @@ check_busy() {
         if test $commits -gt 0; then
             if test -z "$header"; then
                 header='true'
-                echo "Outstanding against $target"
+                echo "Outstanding against ${color_current}$target${color_reset}"
                 echo "--------------------${target//?/-}"
             fi
 
-            echo " * ${branch#refs/heads/}"
-            git log -5 --oneline "^${target}" "${branch}" -- | while read log; do
-                echo " - $log"
-            done
+            echo " * ${color_branch}${branch#refs/heads/}${color_reset}"
+
+            git log -5 ${color} --oneline "^${target}" "${branch}" -- | \
+                while read log; do echo " - $log"; done
+
             if test $commits -gt 5; then
                 echo " + $((commits-5)) more changes not shown..."
             fi
