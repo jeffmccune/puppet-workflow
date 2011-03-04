@@ -1,0 +1,29 @@
+#!/bin/bash
+check_busy() {
+    target="$1"
+    header=''
+    git for-each-ref --format='%(refname)' "refs/heads/*/${target}/[0-9]*" | while read branch; do
+        commits=$(git log --oneline "^${target}" "${branch}" -- | wc -l)
+        if test $commits -gt 0; then
+            if test -z "$header"; then
+                header='true'
+                echo "Outstanding against $target"
+                echo "--------------------${target//?/-}"
+            fi
+
+            echo " * ${branch#refs/heads/}"
+            git log -5 --oneline "^${target}" "${branch}" -- | while read log; do
+                echo " - $log"
+            done
+            if test $commits -gt 5; then
+                echo " + $((commits-5)) more changes not shown..."
+            fi
+            echo ''
+        fi
+    done
+    test -n "$header" && echo ""
+}
+
+for branch in master next 2.6.x 2.6.next; do
+    check_busy "$branch"
+done
