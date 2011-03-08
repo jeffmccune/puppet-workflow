@@ -6,8 +6,10 @@ require 'highline/import'
 
 what = ask("What maintenance? ") do |q|
   q.whitespace = :strip_and_collapse
-  q.default    = ARGV.join(" ")
   q.validate   = /^...../
+
+  cmdline = ARGV.join(" ")
+  q.default = cmdline unless cmdline.empty?
 end
 
 origin = %x{git symbolic-ref HEAD}.chomp.slice(%r{^/refs/heads/(.*)$})
