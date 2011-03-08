@@ -4,15 +4,15 @@ require 'open-uri'
 require 'json'
 require 'highline/import'
 
-what = ask("What maintenance? ") do |q|
-  q.whitespace = :strip_and_collapse
-  q.validate   = /^...../
-
-  cmdline = ARGV.join(" ")
-  q.default = cmdline unless cmdline.empty?
+what = ARGV.join(" ")
+if what.empty? then
+  what = ask("What maintenance? ") do |q|
+    q.whitespace = :strip_and_collapse
+    q.validate   = /^...../
+  end
 end
 
-origin = %x{git symbolic-ref HEAD}.chomp.slice(%r{^/refs/heads/(.*)$})
+origin = %x{git symbolic-ref HEAD}.chomp.slice(%r{^refs/heads/(.*)$})
 unless origin =~ /^[^-]*next$/ then
   origin = ask("Which source branch? ") do |q|
     q.confirm  = true
@@ -21,11 +21,11 @@ unless origin =~ /^[^-]*next$/ then
   end
 end
 
-subject = subject.downcase.tr('^-+_a-z0-9\'', ' ').gsub(/\s+/, '-').gsub(/-+$/, '')
+subject = what.downcase.tr('^-+_a-z0-9\'', ' ').gsub(/\s+/, '-').gsub(/-+$/, '')
 branch = "maint/#{origin}/MAINT-#{subject}"
 
 # Confirmation
-unless agree("do maint on #{branch}? ") { |q| q.default = 'no' } then
+unless agree("do maint on #{branch}? ") { |q| q.default = 'yes' } then
   puts "aborting..."
   exit 0
 end
