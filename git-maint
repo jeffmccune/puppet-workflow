@@ -1,0 +1,45 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'open-uri'
+require 'json'
+require 'highline/import'
+
+what = ask("What maintenance? ") do |q|
+  q.whitespace :strip_and_collapse
+  q.default    ARGV.join(" ")
+  q.validate   /^...../
+end
+
+origin = %x{git symbolic-ref HEAD}.chomp.slice(%r{^/refs/heads/(.*)$})
+unless origin =~ /^[^-]*next$/ then
+  origin = ask("Which source branch? ") do |q|
+    q.confirm  = true
+    q.validate = /\<next$/
+    q.default  = origin
+  end
+end
+
+subject = subject.downcase.tr('^-+_a-z0-9\'', ' ').gsub(/\s+/, '-').gsub(/-+$/, '')
+branch = "maint/#{origin}/MAINT-#{subject}"
+
+# Confirmation
+unless agree("do maint on #{branch}? ") { |q| q.default = 'no' } then
+  puts "aborting..."
+  exit 0
+end
+
+# If we got here, we want to do this, so...
+have_branch = false
+on_branch   = false
+%x{git branch}.each do |ref|
+  if ref.chomp[2..-1] == branch then
+    have_branch = true
+    ref[0..0] == '*' and on_branch = true
+    break
+  end
+end
+
+# Actually do stuff, whee!
+have_branch or system 'git', 'branch',   branch, origin
+on_branch   or system 'git', 'checkout', branch
+exit 0
