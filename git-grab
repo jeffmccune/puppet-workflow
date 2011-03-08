@@ -2,6 +2,7 @@
 require 'rubygems'
 require 'open-uri'
 require 'json'
+require 'highline/import'
 
 unless ARGV.length == 1 then
   puts "you need give a ticket number as the only argument..."
@@ -32,14 +33,9 @@ unless (status = data["status"]["name"]).downcase == "accepted" then
 end
 
 # Confirmation
-print "grab #{branch} [Y/n] ? "
-while input = STDIN.gets.chomp.downcase do
-  break if input == '' or input =~ /^y(?:es)?/
-  if input =~ /^n(?:o)?/ then
-    puts "aborting..."
-    exit 0
-  end
-  print "invalid input '#{input}' [Y/n] ? "
+unless agree("grab #{branch}? ") { |q| q.default = 'no' } then
+  puts "aborting..."
+  exit 0
 end
 
 # If we got here, we want to do this, so...
