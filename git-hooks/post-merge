@@ -100,7 +100,7 @@ jgs  '-._____.-'     not sully the purity of our precious GitHub.
 SORRY
 
   git.reset_hard('HEAD^')
-  puts "HEAD is now at #{header(git.log.first)}"
+  puts "HEAD is now at #{header(git.log(1).first)}"
   puts "Your merge #{red('HAS')} been summarily purged from this branch."
   exit 1
 end
