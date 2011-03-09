@@ -1,0 +1,108 @@
+#!/usr/bin/env ruby
+#
+# A hook script that rejects a commit to an integration branch if it doesn't
+# conform to our standards.  Specifically, it shouldn't accept a commit that
+# doesn't acknowledge the reviewer or pair, or doesn't have a ticket number.
+
+require 'rubygems'
+require 'ansi/mixin'
+require 'git'
+
+include ANSI::Code
+
+git = Git.open('.')
+
+# Don't enforce on any branch except for integration.  Should be config, really.
+exit 0 unless ["next", "master", "2.6.next", "2.6.x"].include? git.branch.name
+
+def header(log)
+  sha   = log.sha[0,7]
+  short = log.message.split("\n")[0][0,72]
+  "#{yellow(sha)} #{cyan(short)}"
+end
+
+# Grab the commit, which we get the parents of the merge from...
+commit = git.gcommit('HEAD')
+unless commit.parents.length == 2 then
+  die "unexpected number of parents (#{commit.parents.length}); expected 2"
+end
+
+# Walk each commit, and verify that the metadata is as it should be.
+bad = false
+git.log.between(commit.parents[0], commit.parents[1]).each do |log|
+  msg = []
+
+  if (count = log.message.count("\n")) < 5 then
+    if count == 1 then
+      msg << red("short")
+    else
+      msg << magenta("short")
+    end
+  end
+
+  # Check the log message for a bug number.
+  log.message =~ /REVISIT/i and msg << green("revisit")
+  log.message =~ /(Paired-With|Reviewed-By):/i or msg << red("no pair name")
+
+  unless log.message =~ /^\(#\d+\)/ then
+    if log.message =~ /^maint:/i then
+      msg << yellow("maint")
+    else
+      msg << red("no bug number")
+    end
+  end
+
+  # Check the author and committer details.
+  if log.author.name == "Daniel Pittman" then
+    unless log.author.email =~ /@puppetlabs\.com/ then
+      if log.author.email =~ /rimspace\.net/
+        msg << magenta("rimspace author")
+      else
+        msg << red("strange author")
+      end
+    end
+  end
+
+  same = (log.author.name  == log.committer.name and
+          log.author.email == log.committer.email)
+  if ! same then
+    if log.committer.name == "Daniel Pittman" then
+      unless log.committer.email =~ /@puppetlabs\.com/ then
+        if log.committer.email =~ /rimspace\.net/
+          msg << magenta("rimspace committer")
+        else
+          msg << red("strange committer")
+        end
+      end
+    else
+      msg << red("unknown committer")
+    end
+  end
+
+  if msg.length > 0 then
+    bad = true
+    puts header(log)
+    puts " * #{msg.join(', ')}"
+  end
+end
+
+if bad then
+  puts <<'SORRY'
+
+     .-. __ _ .-.
+     |  `  / \  |    Sorry, it looks like that branch is really
+     /     '.()--\   not in a state ready to merge.  Kitty regrets
+    |         '._/   to decline your kind invitation to incorporate it.
+   _| O   _   O |_
+   =\    '-'    /=   Please improve, and return when the branch will
+jgs  '-._____.-'     not sully the purity of our precious GitHub.
+
+SORRY
+
+  git.reset_hard('HEAD^')
+  puts "HEAD is now at #{header(git.log.first)}"
+  puts "Your merge #{red('HAS')} been summarily purged from this branch."
+  exit 1
+end
+
+exit 0
