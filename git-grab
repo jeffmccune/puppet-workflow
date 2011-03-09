@@ -16,7 +16,15 @@ end
 
 type    = data["tracker"]["name"]
 subject = data["subject"] or fail "no subject found for the ticket O_o"
-target  = data["fixed_version"]["name"] or fail "no target version"
+begin
+  target = data["fixed_version"]["name"] or fail "no target version"
+rescue
+  origin = %x{git symbolic-ref HEAD}.chomp.sub(%r{^refs/heads/}, '')
+  target = ask("target branch? ") do |q|
+    q.default  = origin if origin =~ /next$/
+    q.validate = /next$/
+  end
+end
 origin  = if target =~ /^2\.6/ then "2.6.next" else "next" end
 
 subject = subject.

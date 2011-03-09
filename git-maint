@@ -12,11 +12,11 @@ if what.empty? then
   end
 end
 
-origin = %x{git symbolic-ref HEAD}.chomp.slice(%r{^refs/heads/(.*)$})
+origin = %x{git symbolic-ref HEAD}.chomp.sub(%r{^refs/heads/}, '')
 unless origin =~ /^[^-]*next$/ then
   origin = ask("Which source branch? ") do |q|
     q.confirm  = true
-    q.validate = /\<next$/
+    q.validate = /next$/
     q.default  = origin
   end
 end
