@@ -2,31 +2,75 @@
 require 'rubygems'
 require 'open-uri'
 require 'json'
+require 'git'
 require 'highline/import'
 
-unless ARGV.length == 1 then
-  puts "you need give a ticket number as the only argument..."
+git = Git.open(%x{git rev-parse --show-toplevel}.chomp)
+$annoying = (git.config('puppetlabs.annoying') =~ /^(y(es)?|t(rue)?|[1-9]\d+)$/)
+
+accept = true
+
+unless ARGV.length > 0 then
+  puts <<'USAGE'
+git grab 1234
+ - grab ticket 1234 from RedMine, and work on it.
+
+git maint whatever reason you have
+ - do maintenance work with whatever reason is given.
+
+USAGE
   exit 1
 end
 
-number = ARGV[0].to_i
-data = open("https://projects.puppetlabs.com/issues/#{number}.json") do |fh|
-  JSON.parse(fh.read)["issue"] or fail "no data found after JSON parse"
-end
+if ARGV[0].downcase =~ /^-*maint$/ then
+  type   = 'maint'
+  number = 'maint'
 
-type    = data["tracker"]["name"]
-subject = data["subject"] or fail "no subject found for the ticket O_o"
-begin
-  target = data["fixed_version"]["name"] or fail "no target version"
-rescue
-  origin = %x{git symbolic-ref HEAD}.chomp.sub(%r{^refs/heads/}, '')
-  target = ask("target branch? ") do |q|
-    q.default  = origin if origin =~ /next$/
-    q.validate = /next$/
+  subject = argv[1..-1].join(" ")
+  if subject.empty? then
+    subject = ask("what are you doing? ") do |q|
+      q.whitespace = :strip_and_collapse
+      q.validate   = /^...../
+    end
+  end
+
+  origin = git.branch
+  unless origin =~ /^[^-]*next$/ then
+    origin = ask("which source branch? ") do |q|
+      q.confirm  = true
+      q.validate = /next$/
+      q.default  = origin
+    end
+  end
+else
+  number = ARGV[0].to_i
+  data = open("https://projects.puppetlabs.com/issues/#{number}.json") do |fh|
+    JSON.parse(fh.read)["issue"] or fail "no data found after json parse"
+  end
+
+  type    = data["tracker"]["name"]
+  subject = data["subject"] or fail "no subject found for the ticket o_o"
+  begin
+    target = data["fixed_version"]["name"] or fail "no target version"
+  rescue
+    origin = git.branch
+    say "#{number} - #{subject}"
+    target = ask("target branch? ") do |q|
+      q.default  = origin if origin =~ /next$/
+      q.validate = /next$/
+    end
+  end
+
+  origin  = if target =~ /^2\.6/ then "2.6.next" else "next" end
+
+  # sanity checks
+  unless (status = data["status"]["name"]).downcase == "accepted" then
+    puts "warning: this ticket is '#{status}', not accepted"
+    accept = false
   end
 end
-origin  = if target =~ /^2\.6/ then "2.6.next" else "next" end
 
+########################################################################
 subject = subject.
   downcase.
   tr('^-+_a-z0-9\'', ' ').
@@ -35,29 +79,28 @@ subject = subject.
 
 branch = "#{type.downcase}/#{origin}/#{number}-#{subject}"
 
-# Sanity checks
-unless (status = data["status"]["name"]).downcase == "accepted" then
-  puts "WARNING: this ticket is '#{status}', not Accepted"
-end
-
-# Confirmation
-unless agree("grab #{branch}? ") { |q| q.default = 'no' } then
-  puts "aborting..."
-  exit 0
-end
-
-# If we got here, we want to do this, so...
-have_branch = false
-on_branch   = false
-%x{git branch}.each do |ref|
-  if ref.chomp[2..-1] == branch then
-    have_branch = true
-    ref[0..0] == '*' and on_branch = true
-    break
+# confirmation
+unless $annoying then
+  unless agree("grab #{branch}? ") { |q| q.default = accept ? 'yes' : 'no' } then
+    puts "aborting..."
+    exit 0
   end
 end
 
-# Actually do stuff, whee!
-have_branch or system 'git', 'branch', branch, origin
-on_branch   or system 'git', 'checkout', branch
+# if we got here, we want to do this, so...
+have_branch = !! git.branch(branch)
+on_branch   = !! (git.current_branch == branch)
+
+# actually do stuff, whee!
+def run(*cmd)
+  if $annoying then
+    unless agree("run: #{cmd.join(" ")}? ") { |q| q.default = 'yes' } then
+      puts "aborting..."
+      exit 0
+    end
+  end
+  system *cmd
+end
+have_branch or run 'git', 'branch', branch, origin
+on_branch   or run 'git', 'checkout', branch
 exit 0
